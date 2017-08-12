@@ -9,7 +9,7 @@ from scrape import *
 import datetime
 import json
 import time
-
+import pandas
 
 def write_line_to_file(filename, data):
     """
@@ -18,7 +18,7 @@ def write_line_to_file(filename, data):
     """
     job_title = data["job_info"]["job_title"]
     company   = data["job_info"]["company"]
-    job_id    = data["job_info"]["job_id"]
+    job_id    = data["job_id"]
     message = u"Writing data to file for job listing:"
     message += "\n  {}  {};   job id  {}\n"
     try:
@@ -27,6 +27,12 @@ def write_line_to_file(filename, data):
         print("Encountered a unicode encode error while attempting to print " \
                     "the job post information;  job id {}".format(job_id))
     with open(filename, "a") as f:
+        for key, items in data['job_info'].items():
+            data[key] = items
+        for key, items in data['search_info'].items():
+            data[key] = items        
+        del data['job_info']
+        del data['search_info']
         f.write(json.dumps(data) + '\n')
 
 def get_date_time():
@@ -117,7 +123,7 @@ def sort_results_by(driver, sorting_criteria):
     """sort results by either relevance or date posted"""
     if sorting_criteria.lower() == 'relevance':
         return
-    button = '//select[@id="jserp-sort-select"]'
+    button = '//select[@id="sort-dropdown-select"]'
     option_path = '//option[@value="DD"]'
     time.sleep(3)
     try:
@@ -268,9 +274,10 @@ def next_results_page(driver, delay):
         print("  Moving to the next page of search results... \n" \
                 "  If search results are exhausted, will wait {} seconds " \
                 "then either execute new search or quit".format(delay))
-        wait_for_clickable_element_css(driver, delay, "a.next-btn")
+ 
         # navigate to next page
-        driver.find_element_by_css_selector("a.next-btn").click()
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        driver.find_element_by_class_name('next').click()
     except Exception as e:
         print ("\nFailed to click next page link; Search results " \
                                 "may have been exhausted\n{}".format(e))
@@ -353,7 +360,8 @@ def extract_transform_load(driver, delay, selector, date,
     finally:
         if not ("Search | LinkedIn" in driver.title):
             driver.execute_script("window.history.go(-1)")
-
+        #testing next page button    
+            time.sleep(3)
 
 class LIClient(object):
     def __init__(self, driver, **kwargs):
@@ -365,7 +373,7 @@ class LIClient(object):
         self.search_radius  =  kwargs["search_radius"]
         self.sort_by        =  kwargs["sort_by"]
         self.salary_range   =  kwargs["salary_range"]
-        self.results_page   =  kwargs["results_page"]
+        self.results_page   =  1
 
     def driver_quit(self):
         self.driver.quit()
@@ -417,17 +425,13 @@ class LIClient(object):
         entering our search.
         """
         driver = self.driver
-        WebDriverWait(driver, 120).until(
-            EC.presence_of_element_located(
-                (By.ID, "keyword-search-box")
-            )
-        )
+        WebDriverWait(driver, 10)
         # Enter search criteria
-        elem = driver.find_element_by_id("keyword-search-box")
+        elem = driver.find_element_by_xpath("//input[contains(@placeholder, 'Search jobs by title, keyword or company')]")
         elem.send_keys(self.keyword)
         # clear the text in the location box then enter location
-        elem = driver.find_element_by_id("location-search-box").clear()
-        elem = driver.find_element_by_id("location-search-box")
+        elem = driver.find_element_by_xpath("//input[contains(@placeholder, 'City, state, postal code or country')]").clear()
+        elem = driver.find_element_by_xpath("//input[contains(@placeholder, 'City, state, postal code or country')]")
         elem.send_keys(self.location)
         elem.send_keys(Keys.RETURN)
         time.sleep(3)
@@ -447,11 +451,11 @@ class LIClient(object):
         """
         driver = self.driver
         search_results_exhausted = False
-        results_page = self.results_page
+        results_page = 1
         delay = 60
         date = get_date_time()
         # css elements to view job pages
-        list_element_tag = '/descendant::a[@class="job-title-link"]['
+        list_element_tag = '/descendant::a[@class="job-card__link-wrapper js-focusable-card ember-view"]['
         print_num_search_results(driver, self.keyword, self.location)
         # go to a specific results page number if one is specified
         go_to_specific_results_page(driver, delay, results_page)

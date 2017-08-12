@@ -7,7 +7,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import datetime
 import json
 import time
-
+import re
 
 def job_id(driver):
     """
@@ -15,9 +15,11 @@ def job_id(driver):
     e.g. url = https://www.linkedin.com/jobs/view/161251904
     returns 161251904
     """
-    elem = driver.find_element_by_xpath("//meta[@property='og:url']")
-    url  = elem.get_attribute("content")
-    return url[url.find('/', 34) + 1:]
+    #elem = driver.find_element_by_css_selector("meta[name='apple-itunes-app']")
+    #url  = elem.get_attribute("content")
+    regex = r"\/\d{9}\/"
+    currentURL = driver.current_url    
+    return re.search(regex,currentURL).group()[1:-1] 
 
 def parse_post_age(text):
         """ map 'posted 10 days ago' => '10' """
@@ -55,27 +57,32 @@ def job_data(driver):
     statements to avoid potential errors with unicode, etc.
     """
     job_info = {
-        "job_title"        :  "h1.title",
-        "company"          :  "span.company",
-        "location"         :  "h3.location",
-        "employment_type"  :  "div.employment div.content div.rich-text",
-        "industry"         :  "div.industry div.content div.rich-text",
-        "experience"       :  "div.experience div.content div.rich-text",
-        "job_function"     :  "div.function div.content div.rich-text",
-        "description"      :  "div.summary div.content div.description-section div.rich-text"
+        "job_title"        :  "/descendant::h1[@class='jobs-details-top-card__job-title Sans-21px-black-85%-dense']",
+        "company"          :  "/descendant::a[@class='jobs-details-top-card__company-url ember-view']",
+        "location"         :  ' span.jobs-details-top-card__bullet',
+        "employment_type"  :  "/descendant::p[@class='jobs-box__body js-formatted-employment-status-body']",
+        "industry"         :  "/descendant::li[@class='jobs-box__list-item jobs-description-details__list-item']",
+        "experience"       :  "/descendant::p[@class='jobs-box__body js-formatted-exp-body']",
+        "job_function"     :  "/descendant::li[@class='jobs-box__list-item jobs-description-details__list-item']",
+        "description"      :  "/descendant::div[@class='jobs-box__html-content jobs-description-content__text Sans-15px-black-70%']",
+        "poster"           :  "p.jobs-poster__name.name"
     }
     # click the 'read more' button to reveal more about the job posting
     try:
-        driver.find_element_by_css_selector("button#job-details-reveal").click()
+        driver.find_element_by_class_name("view-more-icon").click()
     except Exception as e:
         print("error in attempting to click 'reveal details' button")
         print(e)
-    for key, selector in job_info.items():
+    for key, selection in job_info.items():
         try:
-            job_info[key] = driver.find_element_by_css_selector(selector).text
+            job_info[key] = driver.find_element_by_xpath(selection).text
         except Exception as e:
-            job_info[key] = ""
-            pass
+            try:
+                job_info[key] = driver.find_element_by_css_selector(selection).text
+            except Exception as e:
+                job_info[key] = ''
+                print('Failed to get job details!!!')
+                pass
     return job_info
 
 def company_data(driver):
@@ -229,7 +236,9 @@ def scrape_page(driver, **kwargs):
     """
     # wait ~1 second for elements to be dynamically rendered
     time.sleep(1.2)
+  
     start = time.time()
+    
     containers = [
         "section#top-card div.content",            # job content
         "div.job-salary-container",                # job salary
@@ -260,10 +269,12 @@ def scrape_page(driver, **kwargs):
         "company_info"      :  company_data(driver)
     }
     job_info.update(job_data(driver))
+
     data = {
-        "applicant_info"    :  applicant_info,
-        "job_info"          :  job_info,
-        "post_info"         :  post_data(driver),
+#        "applicant_info"    :  applicant_info,
+        "job_id"          :  job_id(driver),
+        "job_info"        :  job_data(driver), 
+#        "post_info"         :  post_data(driver),
         "search_info"       :  kwargs
     }
     print("scraped page in  {}  seconds\n".format(time.time()-start))

@@ -62,12 +62,14 @@ def parse_command_line_args():
         """)
     return vars(parser.parse_args())
 
+
+
 if __name__ == "__main__":
 
-    search_keys = parse_command_line_args()
+    #search_keys = parse_command_line_args()
 
     # initialize selenium webdriver - pass latest chromedriver path to webdriver.Chrome()
-    driver = webdriver.Chrome('/usr/bin/chromedriver')
+    driver = webdriver.Chrome()
     driver.get("https://www.linkedin.com/uas/login")
 
     # initialize LinkedIn web client
@@ -86,6 +88,7 @@ if __name__ == "__main__":
             liclient.keyword  = keyword
             liclient.location = location
             liclient.navigate_to_jobs_page()
+            time.sleep(3)
             liclient.enter_search_keys()
             liclient.customize_search_results()
             liclient.navigate_search_results()
