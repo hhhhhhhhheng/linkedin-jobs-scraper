@@ -277,7 +277,7 @@ def scrape_page(driver, **kwargs):
 #        "post_info"         :  post_data(driver),
         "search_info"       :  kwargs
     }
-    print("scraped page in  {}  seconds\n".format(time.time()-start))
+    print("craped page in  {}  seconds\n".format(time.time()-start))
     # try:
     #     print("data:\n\n{}\n".format(data))
     # except Exception as e:

@@ -1,10 +1,12 @@
 from __future__ import print_function
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException  
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 from scrape import *
 import datetime
 import json
@@ -153,9 +155,17 @@ def robust_wait_for_clickable_element(driver, delay, selector):
             try:
                 # wait for job post link to load
                 wait_for_clickable_element(driver, delay, selector)
+#                driver.execute_script("window.scrollTo(0, 10000);")
+#                actions.send_keys(Keys.SPACE).perform()
+#                time.sleep(1.5)
             except Exception as e:
                 print("  {}".format(e))
                 attempts += 1
+#           Solving the dynamic loading problem                
+                if attempts % 10:                    
+                    actions = ActionChains(driver)
+                    actions.send_keys(Keys.SPACE).perform() 
+                    time.sleep(1.5)
                 if attempts % 100 == 0:
                     driver.refresh()
                 if attempts > 10**3: 
@@ -173,6 +183,7 @@ def robust_click(driver, delay, selector):
     """
     try:
         driver.find_element_by_xpath(selector).click()
+
     except Exception as e:
         print("  The job post link was likely hidden,\n    An " \
                 "error was encountered while attempting to click link" \
@@ -182,6 +193,9 @@ def robust_click(driver, delay, selector):
         while not clicked:
             try:
                 driver.find_element_by_xpath(selector).click()
+                actions = ActionChains(driver)
+                actions.send_keys(Keys.SPACE).perform() 
+                time.sleep(1)
             except Exception as e:
                 pass
             else:
@@ -207,6 +221,7 @@ def wait_for_clickable_element(driver, delay, selector):
                 (By.XPATH, selector)
             )
         )
+    
     return obj  
 
 def wait_for_clickable_element_css(driver, delay, selector):
@@ -217,7 +232,7 @@ def wait_for_clickable_element_css(driver, delay, selector):
             )
         )
     return obj  
-
+      
 
 def link_is_present(driver, delay, selector, index, results_page):
     """
@@ -226,6 +241,8 @@ def link_is_present(driver, delay, selector, index, results_page):
     the last link on the last page of search results
     """
     try:
+        #only used to test space key
+        
         WebDriverWait(driver, delay).until(
             EC.presence_of_element_located(
                 (By.XPATH, selector)
@@ -359,9 +376,27 @@ def extract_transform_load(driver, delay, selector, date,
         write_line_to_file(filename, data)
     finally:
         if not ("Search | LinkedIn" in driver.title):
-            driver.execute_script("window.history.go(-1)")
-        #testing next page button    
+         #Trying to discover hidden elements   
             time.sleep(3)
+            driver.execute_script("window.history.go(-1)") 
+            #这个sleep死都不能拿掉
+            time.sleep(2)
+ 
+def attempt(driver, delay, job_selector, i, results_page):
+    # try to find the link through scrolling down
+    #check element's presence
+    while not check_exists_by_xpath(driver,job_selector) :
+        actions = ActionChains(driver)
+        actions.send_keys(Keys.SPACE).perform()
+        time.sleep(1)
+
+def check_exists_by_xpath(driver,xpath):
+    try:
+        driver.find_element_by_xpath(xpath)
+    except NoSuchElementException:
+        return False
+    return True
+        
 
 class LIClient(object):
     def __init__(self, driver, **kwargs):
@@ -444,7 +479,9 @@ class LIClient(object):
         # scroll to top of page so the sorting menu is in view
         self.driver.execute_script("window.scrollTo(0, 0);")
         sort_results_by(self.driver, self.sort_by)
+    
 
+        
     def navigate_search_results(self):
         """
         scrape postings for all pages in search results
@@ -452,28 +489,33 @@ class LIClient(object):
         driver = self.driver
         search_results_exhausted = False
         results_page = 1
-        delay = 60
+        delay = 30
         date = get_date_time()
         # css elements to view job pages
         list_element_tag = '/descendant::a[@class="job-card__link-wrapper js-focusable-card ember-view"]['
         print_num_search_results(driver, self.keyword, self.location)
         # go to a specific results page number if one is specified
         go_to_specific_results_page(driver, delay, results_page)
-        results_page = results_page if results_page > 1 else 1
+        results_page = results_page if results_page > 1 else 1       
 
         while not search_results_exhausted:
-            for i in range(1,26):  # 25 results per page
+            for i in range(6,26):  # 25 results per page
                 # define the css selector for the blue 'View' button for job i
-                job_selector = list_element_tag + str(i) + ']'
-                if search_suggestion_box_is_present(driver, 
-                                            job_selector, i, results_page):
-                    continue
+                job_selector = list_element_tag + str(2*i) + ']'
+#                if search_suggestion_box_is_present(driver, 
+#                                            job_selector, i, results_page):
+#                    continue
                 # wait for the selector for the next job posting to load.
                 # if on last results page, then throw exception as job_selector 
                 # will not be detected on the page
-                if not link_is_present(driver, delay, 
-                                         job_selector, i, results_page):
+                attempt(driver, delay, job_selector, i, results_page)
+                if not link_is_present(driver, delay, job_selector, i, results_page):
                     continue
+                
+#                if not link_is_present(driver, delay, 
+#                                         job_selector, i, results_page):
+#                    continue
+                   
                 robust_wait_for_clickable_element(driver, delay, job_selector)
                 extract_transform_load(driver,
                                        delay,
@@ -481,7 +523,8 @@ class LIClient(object):
                                        date,
                                        self.keyword,
                                        self.location,
-                                       self.filename)
+                                       self.filename,
+                                       )
             # attempt to navigate to the next page of search results
             # if the link is not present, then the search results have been 
             # exhausted
